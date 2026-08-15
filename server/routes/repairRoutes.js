@@ -19,8 +19,6 @@ const upload = require('../middleware/upload');
 const validate = require('../middleware/validate');
 
 const router = express.Router();
-
-// Public tracking is read-only. Approval/rejection is authenticated below.
 router.get('/track/:repairId', getPublicRepairByTrackingId);
 
 const verifyCustomerOwnsRepair = async (req, res, next) => {
@@ -40,7 +38,6 @@ const verifyCustomerOwnsRepair = async (req, res, next) => {
 };
 
 router.post('/track/:repairId/decision', protect, authorize('customer'), verifyCustomerOwnsRepair, customerApproveReject);
-
 router.use(protect);
 
 router
@@ -70,6 +67,16 @@ router
 router.patch('/:id/status', authorize('admin', 'technician'), updateRepairStatus);
 router.post('/:id/diagnosis', authorize('admin', 'technician'), addDiagnosis);
 router.post('/:id/photos', authorize('admin', 'technician'), upload.array('photos', 5), uploadRepairPhotos);
-router.post('/:id/payment', authorize('admin'), recordPayment);
+router.post(
+  '/:id/payment',
+  authorize('admin'),
+  [
+    body('amountPaid').optional().isFloat({ min: 0 }).withMessage('Payment amount must be zero or greater'),
+    body('finalCost').optional().isFloat({ min: 0 }).withMessage('Final cost must be zero or greater'),
+    body('paymentMethod').optional().isIn(['Cash', 'UPI', 'Card', 'Bank Transfer', 'Pending']).withMessage('Invalid payment method'),
+    validate,
+  ],
+  recordPayment
+);
 
 module.exports = router;
