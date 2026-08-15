@@ -15,9 +15,6 @@ const repairRoutes = require('./routes/repairRoutes');
 const dashboardRoutes = require('./routes/dashboardRoutes');
 const userRoutes = require('./routes/userRoutes');
 
-// Connect to MongoDB
-connectDB();
-
 const app = express();
 
 // Body Parser & Middlewares
@@ -48,7 +45,7 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/users', userRoutes);
 
 // 404 Handler
-app.use((req, res, next) => {
+app.use((req, res) => {
   res.status(404).json({
     success: false,
     message: `API Route Not Found - ${req.originalUrl}`,
@@ -60,15 +57,21 @@ app.use(errorHandler);
 
 const PORT = process.env.PORT || 5000;
 
-const server = app.listen(PORT, () => {
-  console.log(`=======================================================`);
-  console.log(`[Repair Tracker Server running in ${process.env.NODE_ENV || 'development'} mode]`);
-  console.log(`[Listening on Port]: http://localhost:${PORT}`);
-  console.log(`=======================================================`);
-});
+const startServer = async () => {
+  await connectDB();
+
+  app.listen(PORT, () => {
+    console.log('=======================================================');
+    console.log(`[Repair Tracker Server running in ${process.env.NODE_ENV || 'development'} mode]`);
+    console.log(`[Listening on Port]: http://localhost:${PORT}`);
+    console.log('=======================================================');
+  });
+};
+
+startServer();
 
 // Handle unhandled rejections
-process.on('unhandledRejection', (err, promise) => {
+process.on('unhandledRejection', (err) => {
   console.error(`[Unhandled Rejection]: ${err.message}`);
 });
 
