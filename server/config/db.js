@@ -1,7 +1,5 @@
 const mongoose = require('mongoose');
 
-let mongoServer = null;
-
 const demoUsers = [
   {
     name: 'Rajesh Kumar (Shop Owner)',
@@ -29,14 +27,11 @@ const demoUsers = [
   },
 ];
 
-// Creates demo staff only when they do not already exist.
-// This works with both MongoDB Atlas and the temporary development database.
 const createDemoUsers = async () => {
   const User = require('../models/User');
 
   for (const userData of demoUsers) {
     const existingUser = await User.findOne({ email: userData.email });
-
     if (!existingUser) {
       await User.create(userData);
       console.log(`[Demo User Created]: ${userData.email}`);
@@ -47,22 +42,15 @@ const createDemoUsers = async () => {
 const connectDB = async () => {
   const mongoUri = process.env.MONGODB_URI;
 
+  if (!mongoUri) {
+    throw new Error(
+      'MONGODB_URI is not configured. Add your MongoDB Atlas connection string to server/.env. Persistent storage is required.'
+    );
+  }
+
   try {
-    if (mongoUri) {
-      const conn = await mongoose.connect(mongoUri);
-      console.log(`[MongoDB Connected]: ${conn.connection.host}`);
-
-      // Seed demo staff into the persistent database if they are missing.
-      await createDemoUsers();
-      return;
-    }
-
-    console.log('[MongoDB]: No MONGODB_URI found. Starting temporary in-memory database...');
-    const { MongoMemoryServer } = require('mongodb-memory-server');
-    mongoServer = await MongoMemoryServer.create();
-    const conn = await mongoose.connect(mongoServer.getUri());
-    console.log(`[MongoDB Connected (Temporary)]: ${conn.connection.host}`);
-
+    const conn = await mongoose.connect(mongoUri);
+    console.log(`[MongoDB Connected]: ${conn.connection.host}`);
     await createDemoUsers();
   } catch (error) {
     console.error(`[MongoDB Error]: ${error.message}`);
