@@ -27,9 +27,12 @@ userSchema.methods.matchPassword = async function (enteredPassword) {
 };
 
 userSchema.methods.getSignedJwtToken = function () {
+  if (!process.env.JWT_SECRET) {
+    throw new Error('JWT_SECRET is not configured. Add JWT_SECRET to server/.env.');
+  }
   return jwt.sign(
     { id: this._id, role: this.role, email: this.email, name: this.name },
-    process.env.JWT_SECRET || 'fallback_secret_key',
+    process.env.JWT_SECRET,
     { expiresIn: process.env.JWT_EXPIRE || '30d' }
   );
 };
