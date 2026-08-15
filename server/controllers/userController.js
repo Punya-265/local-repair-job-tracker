@@ -1,15 +1,15 @@
 const User = require('../models/User');
 const Repair = require('../models/Repair');
 
-// @desc    Get all technicians/staff
-// @route   GET /api/users
-// @access  Private (Admin)
 exports.getUsers = async (req, res, next) => {
   try {
-    const roleFilter = req.query.role ? { role: req.query.role } : {};
-    const users = await User.find(roleFilter).sort({ createdAt: -1 });
+    // Admin staff screen must never accidentally include customers.
+    const requestedRole = req.query.role;
+    const roleFilter = requestedRole
+      ? { role: requestedRole }
+      : { role: { $in: ['admin', 'technician'] } };
 
-    // Attach active job count to each user
+    const users = await User.find(roleFilter).sort({ createdAt: -1 });
     const usersWithWorkload = await Promise.all(
       users.map(async (u) => {
         const activeJobsCount = await Repair.countDocuments({
@@ -28,33 +28,35 @@ exports.getUsers = async (req, res, next) => {
       })
     );
 
-    res.status(200).json({
-      success: true,
-      users: usersWithWorkload,
-    });
+    res.status(200).json({ success: true, users: usersWithWorkload });
   } catch (error) {
     next(error);
   }
 };
 
-// @desc    Create new technician / staff user
-// @route   POST /api/users
-// @access  Private (Admin)
+// Admin staff creation intentionally creates technicians only.
 exports.createUser = async (req, res, next) => {
   try {
-    const { name, email, phone, password, role, specialization } = req.body;
+    const { name, email, phone, password, specialization } = req.body;
+    if (!name || !email || !phone || !password) {
+      return res.status(400).json({ success: false, message: 'Name, email, phone and password are required' });
+    }
+    if (password.length < 6) {
+      return res.status(400).json({ success: false, message: 'Password must be at least 6 characters' });
+    }
 
-    const existingUser = await User.findOne({ email: email.toLowerCase() });
+    const normalizedEmail = email.toLowerCase().trim();
+    const existingUser = await User.findOne({ email: normalizedEmail });
     if (existingUser) {
       return res.status(400).json({ success: false, message: 'User with this email already exists' });
     }
 
     const user = await User.create({
-      name,
-      email,
-      phone,
+      name: name.trim(),
+      email: normalizedEmail,
+      phone: phone.trim(),
       password,
-      role: role || 'technician',
+      role: 'technician',
       specialization: specialization || 'General Electronics Repair',
     });
 
@@ -74,56 +76,44 @@ exports.createUser = async (req, res, next) => {
   }
 };
 
-// @desc    Update user
-// @route   PUT /api/users/:id
-// @access  Private (Admin)
 exports.updateUser = async (req, res, next) => {
   try {
     const { name, phone, specialization, role, active, password } = req.body;
-    const fieldsToUpdate = {};
-    if (name) fieldsToUpdate.name = name;
-    if (phone) fieldsToUpdate.phone = phone;
-    if (specialization) fieldsToUpdate.specialization = specialization;
-    if (role) fieldsToUpdate.role = role;
-    if (active !== undefined) fieldsToUpdate.active = active;
-
     const user = await User.findById(req.params.id);
-    if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found' });
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+    if (role && !['admin', 'technician'].includes(role)) {
+      return res.status(400).json({ success: false, message: 'Staff role must be admin or technician' });
     }
 
+    if (name) user.name = name.trim();
+    if (phone) user.phone = phone.trim();
+    if (specialization) user.specialization = specialization;
+    if (role) user.role = role;
+    if (active !== undefined) user.active = Boolean(active);
     if (password) {
+      if (password.length < 6) return res.status(400).json({ success: false, message: 'Password must be at least 6 characters' });
       user.password = password;
     }
 
-    Object.assign(user, fieldsToUpdate);
     await user.save();
-
-    res.status(200).json({
-      success: true,
-      user,
-    });
+    res.status(200).json({ success: true, user });
   } catch (error) {
     next(error);
   }
 };
 
-// @desc    Delete user
-// @route   DELETE /api/users/:id
-// @access  Private (Admin)
 exports.deleteUser = async (req, res, next) => {
   try {
-    const user = await User.findById(req.params.id);
-    if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found' });
+    if (String(req.params.id) === String(req.user._id)) {
+      return res.status(400).json({ success: false, message: 'You cannot delete your own admin account' });
     }
 
-    await user.deleteOne();
+    const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
 
-    res.status(200).json({
-      success: true,
-      message: 'User removed successfully',
-    });
+    await user.deleteOne();
+    res.status(200).json({ success: true, message: 'User removed successfully' });
   } catch (error) {
     next(error);
   }
