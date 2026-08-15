@@ -40,6 +40,12 @@ const verifyCustomerOwnsRepair = async (req, res, next) => {
 router.post('/track/:repairId/decision', protect, authorize('customer'), verifyCustomerOwnsRepair, customerApproveReject);
 router.use(protect);
 
+const sanitizeRepairUpdate = (req, res, next) => {
+  const allowed = ['device', 'reportedProblem', 'notes', 'priority', 'estimatedCost', 'finalCost', 'estimatedCompletionDate', 'assignedTechnician'];
+  req.body = Object.fromEntries(Object.entries(req.body || {}).filter(([key]) => allowed.includes(key)));
+  next();
+};
+
 router
   .route('/')
   .post(
@@ -61,7 +67,7 @@ router
 router
   .route('/:id')
   .get(authorize('admin', 'technician'), getRepairById)
-  .put(authorize('admin', 'technician'), updateRepair)
+  .put(authorize('admin', 'technician'), sanitizeRepairUpdate, updateRepair)
   .delete(authorize('admin'), deleteRepair);
 
 router.patch('/:id/status', authorize('admin', 'technician'), updateRepairStatus);
