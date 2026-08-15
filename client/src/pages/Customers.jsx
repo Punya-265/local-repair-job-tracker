@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from '../services/api';
-import { UserCheck, Phone, Mail, Search, Wrench, Loader2 } from 'lucide-react';
+import { Search, Loader2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 const Customers = () => {
@@ -15,48 +15,77 @@ const Customers = () => {
   const fetchCustomers = async () => {
     try {
       setLoading(true);
-      const res = await api.get('/repairs?limit=100');
-      if (res.data.success) {
-        // Group by customer email or phone
-        const map = new Map();
-        res.data.repairs.forEach((repair) => {
-          const key = repair.customer.email || repair.customer.phone;
-          if (!map.has(key)) {
-            map.set(key, {
-              name: repair.customer.name,
-              email: repair.customer.email,
-              phone: repair.customer.phone,
-              repairsCount: 1,
-              latestRepairId: repair.repairId,
-              latestRepairDate: repair.createdAt,
-            });
-          } else {
-            const item = map.get(key);
-            item.repairsCount += 1;
-          }
-        });
-        setCustomers(Array.from(map.values()));
-      }
+
+      // Fetch actual customer accounts so newly registered customers
+      // appear even before they create their first repair.
+      const [usersRes, repairsRes] = await Promise.all([
+        api.get('/users?role=customer'),
+        api.get('/repairs?limit=100'),
+      ]);
+
+      const users = usersRes.data?.users || [];
+      const repairs = repairsRes.data?.repairs || [];
+
+      const repairMap = new Map();
+      repairs.forEach((repair) => {
+        const email = repair.customer?.email?.toLowerCase();
+        const phone = repair.customer?.phone;
+        const key = email || phone;
+        if (!key) return;
+
+        const existing = repairMap.get(key);
+        if (!existing || new Date(repair.createdAt) > new Date(existing.latestRepairDate)) {
+          repairMap.set(key, {
+            count: existing ? existing.count + 1 : 1,
+            latestRepairId: repair.repairId,
+            latestRepairDate: repair.createdAt,
+          });
+        } else {
+          existing.count += 1;
+        }
+      });
+
+      // Start with every registered customer, then attach their repair data.
+      const customerList = users.map((user) => {
+        const key = user.email?.toLowerCase() || user.phone;
+        const repairInfo = repairMap.get(key);
+        return {
+          id: user._id || user.id,
+          name: user.name,
+          email: user.email,
+          phone: user.phone,
+          repairsCount: repairInfo?.count || 0,
+          latestRepairId: repairInfo?.latestRepairId || null,
+          latestRepairDate: repairInfo?.latestRepairDate || user.createdAt,
+        };
+      });
+
+      setCustomers(customerList);
     } catch (err) {
-      console.error(err);
+      console.error('Failed to load customers:', err);
+      setCustomers([]);
     } finally {
       setLoading(false);
     }
   };
 
-  const filtered = customers.filter(
-    (c) =>
-      c.name.toLowerCase().includes(search.toLowerCase()) ||
-      c.phone.includes(search) ||
-      c.email.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = customers.filter((c) => {
+    const query = search.toLowerCase();
+    return (
+      c.name?.toLowerCase().includes(query) ||
+      c.phone?.toLowerCase().includes(query) ||
+      c.email?.toLowerCase().includes(query)
+    );
+  });
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-extrabold text-slate-100 tracking-tight">Customer Database</h1>
-          <p className="text-xs text-slate-400 mt-1">Directory of repair shop clients and repair history</p>
+          <p className="text-xs text-slate-400 mt-1">
+            All registered customers and their repair history
+          </p>
         </div>
       </div>
 
@@ -93,8 +122,8 @@ const Customers = () => {
               </thead>
               <tbody className="divide-y divide-slate-800/60">
                 {filtered.length > 0 ? (
-                  filtered.map((c, i) => (
-                    <tr key={i} className="hover:bg-slate-800/40 transition">
+                  filtered.map((c) => (
+                    <tr key={c.id || c.email} className="hover:bg-slate-800/40 transition">
                       <td className="py-3.5 px-4 font-semibold text-slate-200">{c.name}</td>
                       <td className="py-3.5 px-4 text-slate-400">{c.phone}</td>
                       <td className="py-3.5 px-4 text-slate-400">{c.email}</td>
@@ -104,13 +133,17 @@ const Customers = () => {
                         </span>
                       </td>
                       <td className="py-3.5 px-4 text-right">
-                        <Link
-                          to={`/track/${c.latestRepairId}`}
-                          target="_blank"
-                          className="font-mono font-bold text-teal-400 hover:underline"
-                        >
-                          {c.latestRepairId}
-                        </Link>
+                        {c.latestRepairId ? (
+                          <Link
+                            to={`/track/${c.latestRepairId}`}
+                            target="_blank"
+                            className="font-mono font-bold text-teal-400 hover:underline"
+                          >
+                            {c.latestRepairId}
+                          </Link>
+                        ) : (
+                          <span className="text-slate-600">No repairs yet</span>
+                        )}
                       </td>
                     </tr>
                   ))
