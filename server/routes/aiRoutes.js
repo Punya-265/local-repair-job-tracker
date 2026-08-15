@@ -42,7 +42,9 @@ Do not claim certainty and do not invent device-specific specifications.`;
         Authorization: `Bearer ${process.env.HF_TOKEN}`,
       },
       body: JSON.stringify({
-        model: process.env.HF_MODEL || 'Qwen/Qwen2.5-7B-Instruct-1M',
+        // Qwen2.5-7B-Instruct currently has an enabled Inference Provider
+        // (Together AI) and is supported by Hugging Face's chat-completion API.
+        model: process.env.HF_MODEL || 'Qwen/Qwen2.5-7B-Instruct',
         messages: [
           {
             role: 'system',
