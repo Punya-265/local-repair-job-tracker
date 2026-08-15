@@ -1,5 +1,6 @@
 const express = require('express');
 const { body } = require('express-validator');
+const Repair = require('../models/Repair');
 const {
   createRepair,
   getRepairs,
@@ -19,11 +20,26 @@ const validate = require('../middleware/validate');
 
 const router = express.Router();
 
-// Public customer tracking is read-only.
+// Public tracking is read-only. Approval/rejection is authenticated below.
 router.get('/track/:repairId', getPublicRepairByTrackingId);
 
-// Customer decisions require an authenticated customer account.
-router.post('/track/:repairId/decision', protect, authorize('customer'), customerApproveReject);
+const verifyCustomerOwnsRepair = async (req, res, next) => {
+  try {
+    const repair = await Repair.findOne({ repairId: req.params.repairId.toUpperCase() }).select('customer status');
+    if (!repair) return res.status(404).json({ success: false, message: 'Repair job not found' });
+    if (repair.customer.email !== req.user.email.toLowerCase()) {
+      return res.status(403).json({ success: false, message: 'You are not authorized to decide on this repair' });
+    }
+    if (repair.status !== 'Waiting for Approval') {
+      return res.status(409).json({ success: false, message: 'This repair is not currently waiting for approval' });
+    }
+    next();
+  } catch (error) {
+    next(error);
+  }
+};
+
+router.post('/track/:repairId/decision', protect, authorize('customer'), verifyCustomerOwnsRepair, customerApproveReject);
 
 router.use(protect);
 
