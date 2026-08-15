@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import api from '../services/api';
 import { Search, Loader2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import api from '../services/api';
 
 const Customers = () => {
   const [customers, setCustomers] = useState([]);
@@ -15,78 +15,63 @@ const Customers = () => {
   const fetchCustomers = async () => {
     try {
       setLoading(true);
-
-      // Fetch actual customer accounts so newly registered customers
-      // appear even before they create their first repair.
       const [usersRes, repairsRes] = await Promise.all([
         api.get('/users?role=customer'),
         api.get('/repairs?limit=100'),
       ]);
 
-      const users = usersRes.data?.users || [];
-      const repairs = repairsRes.data?.repairs || [];
-
+      const users = usersRes.data.success ? usersRes.data.users : [];
+      const repairs = repairsRes.data.success ? repairsRes.data.repairs : [];
       const repairMap = new Map();
+
       repairs.forEach((repair) => {
         const email = repair.customer?.email?.toLowerCase();
-        const phone = repair.customer?.phone;
-        const key = email || phone;
-        if (!key) return;
-
-        const existing = repairMap.get(key);
+        if (!email) return;
+        const existing = repairMap.get(email);
         if (!existing || new Date(repair.createdAt) > new Date(existing.latestRepairDate)) {
-          repairMap.set(key, {
-            count: existing ? existing.count + 1 : 1,
+          repairMap.set(email, {
+            repairsCount: existing ? existing.repairsCount + 1 : 1,
             latestRepairId: repair.repairId,
             latestRepairDate: repair.createdAt,
           });
         } else {
-          existing.count += 1;
+          existing.repairsCount += 1;
         }
       });
 
-      // Start with every registered customer, then attach their repair data.
-      const customerList = users.map((user) => {
-        const key = user.email?.toLowerCase() || user.phone;
-        const repairInfo = repairMap.get(key);
-        return {
-          id: user._id || user.id,
-          name: user.name,
-          email: user.email,
-          phone: user.phone,
-          repairsCount: repairInfo?.count || 0,
-          latestRepairId: repairInfo?.latestRepairId || null,
-          latestRepairDate: repairInfo?.latestRepairDate || user.createdAt,
-        };
-      });
-
-      setCustomers(customerList);
+      setCustomers(
+        users.map((user) => {
+          const repairInfo = repairMap.get(user.email.toLowerCase());
+          return {
+            id: user._id,
+            name: user.name,
+            email: user.email,
+            phone: user.phone,
+            repairsCount: repairInfo?.repairsCount || 0,
+            latestRepairId: repairInfo?.latestRepairId || null,
+            latestRepairDate: repairInfo?.latestRepairDate || null,
+          };
+        })
+      );
     } catch (err) {
       console.error('Failed to load customers:', err);
-      setCustomers([]);
     } finally {
       setLoading(false);
     }
   };
 
-  const filtered = customers.filter((c) => {
-    const query = search.toLowerCase();
-    return (
-      c.name?.toLowerCase().includes(query) ||
-      c.phone?.toLowerCase().includes(query) ||
-      c.email?.toLowerCase().includes(query)
-    );
-  });
+  const filtered = customers.filter(
+    (c) =>
+      c.name.toLowerCase().includes(search.toLowerCase()) ||
+      c.phone.includes(search) ||
+      c.email.toLowerCase().includes(search.toLowerCase())
+  );
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-extrabold text-slate-100 tracking-tight">Customer Database</h1>
-          <p className="text-xs text-slate-400 mt-1">
-            All registered customers and their repair history
-          </p>
-        </div>
+      <div>
+        <h1 className="text-2xl font-extrabold text-slate-100 tracking-tight">Customer Database</h1>
+        <p className="text-xs text-slate-400 mt-1">Registered customers and their repair history</p>
       </div>
 
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
@@ -123,7 +108,7 @@ const Customers = () => {
               <tbody className="divide-y divide-slate-800/60">
                 {filtered.length > 0 ? (
                   filtered.map((c) => (
-                    <tr key={c.id || c.email} className="hover:bg-slate-800/40 transition">
+                    <tr key={c.id} className="hover:bg-slate-800/40 transition">
                       <td className="py-3.5 px-4 font-semibold text-slate-200">{c.name}</td>
                       <td className="py-3.5 px-4 text-slate-400">{c.phone}</td>
                       <td className="py-3.5 px-4 text-slate-400">{c.email}</td>
@@ -134,11 +119,7 @@ const Customers = () => {
                       </td>
                       <td className="py-3.5 px-4 text-right">
                         {c.latestRepairId ? (
-                          <Link
-                            to={`/track/${c.latestRepairId}`}
-                            target="_blank"
-                            className="font-mono font-bold text-teal-400 hover:underline"
-                          >
+                          <Link to={`/track/${c.latestRepairId}`} target="_blank" className="font-mono font-bold text-teal-400 hover:underline">
                             {c.latestRepairId}
                           </Link>
                         ) : (
@@ -148,11 +129,7 @@ const Customers = () => {
                     </tr>
                   ))
                 ) : (
-                  <tr>
-                    <td colSpan="5" className="py-8 text-center text-slate-500">
-                      No customer records found.
-                    </td>
-                  </tr>
+                  <tr><td colSpan="5" className="py-8 text-center text-slate-500">No customer records found.</td></tr>
                 )}
               </tbody>
             </table>
