@@ -2,42 +2,46 @@ const mongoose = require('mongoose');
 
 let mongoServer = null;
 
+const demoUsers = [
+  {
+    name: 'Rajesh Kumar (Shop Owner)',
+    email: 'admin@repairshop.com',
+    phone: '+91 98765 00001',
+    password: 'admin123',
+    role: 'admin',
+    specialization: 'Shop Manager & Hardware Engineer',
+  },
+  {
+    name: 'Alex Rivera',
+    email: 'tech.alex@repairshop.com',
+    phone: '+91 98765 00002',
+    password: 'tech123',
+    role: 'technician',
+    specialization: 'Laptop Motherboard & BGA Repair',
+  },
+  {
+    name: 'Samantha Lee',
+    email: 'tech.sam@repairshop.com',
+    phone: '+91 98765 00003',
+    password: 'tech123',
+    role: 'technician',
+    specialization: 'Smartphone Screen & Micro-soldering',
+  },
+];
+
+// Creates demo staff only when they do not already exist.
+// This works with both MongoDB Atlas and the temporary development database.
 const createDemoUsers = async () => {
   const User = require('../models/User');
-  const existingUser = await User.findOne({ email: 'admin@repairshop.com' });
 
-  if (existingUser) return;
+  for (const userData of demoUsers) {
+    const existingUser = await User.findOne({ email: userData.email });
 
-  await User.create([
-    {
-      name: 'Rajesh Kumar (Shop Owner)',
-      email: 'admin@repairshop.com',
-      phone: '+91 98765 00001',
-      password: 'admin123',
-      role: 'admin',
-      specialization: 'Shop Manager & Hardware Engineer',
-    },
-    {
-      name: 'Alex Rivera',
-      email: 'tech.alex@repairshop.com',
-      phone: '+91 98765 00002',
-      password: 'tech123',
-      role: 'technician',
-      specialization: 'Laptop Motherboard & BGA Repair',
-    },
-    {
-      name: 'Samantha Lee',
-      email: 'tech.sam@repairshop.com',
-      phone: '+91 98765 00003',
-      password: 'tech123',
-      role: 'technician',
-      specialization: 'Smartphone Screen & Micro-soldering',
-    },
-  ]);
-
-  console.log('[Demo Users Created]');
-  console.log('Admin: admin@repairshop.com / admin123');
-  console.log('Technician: tech.alex@repairshop.com / tech123');
+    if (!existingUser) {
+      await User.create(userData);
+      console.log(`[Demo User Created]: ${userData.email}`);
+    }
+  }
 };
 
 const connectDB = async () => {
@@ -47,6 +51,9 @@ const connectDB = async () => {
     if (mongoUri) {
       const conn = await mongoose.connect(mongoUri);
       console.log(`[MongoDB Connected]: ${conn.connection.host}`);
+
+      // Seed demo staff into the persistent database if they are missing.
+      await createDemoUsers();
       return;
     }
 
