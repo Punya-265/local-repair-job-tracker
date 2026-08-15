@@ -19,11 +19,12 @@ const validate = require('../middleware/validate');
 
 const router = express.Router();
 
-// Public customer tracking routes
+// Public customer tracking is read-only.
 router.get('/track/:repairId', getPublicRepairByTrackingId);
-router.post('/track/:repairId/decision', customerApproveReject);
 
-// Protected routes (Admin & Technician)
+// Customer decisions require an authenticated customer account.
+router.post('/track/:repairId/decision', protect, authorize('customer'), customerApproveReject);
+
 router.use(protect);
 
 router
@@ -31,13 +32,13 @@ router
   .post(
     authorize('admin', 'technician'),
     [
-      body('customer.name').notEmpty().withMessage('Customer name is required'),
-      body('customer.phone').notEmpty().withMessage('Customer phone is required'),
+      body('customer.name').trim().notEmpty().withMessage('Customer name is required'),
+      body('customer.phone').trim().notEmpty().withMessage('Customer phone is required'),
       body('customer.email').isEmail().withMessage('Valid customer email is required'),
       body('device.type').notEmpty().withMessage('Device type is required'),
-      body('device.brand').notEmpty().withMessage('Device brand is required'),
-      body('device.model').notEmpty().withMessage('Device model is required'),
-      body('reportedProblem').notEmpty().withMessage('Reported problem description is required'),
+      body('device.brand').trim().notEmpty().withMessage('Device brand is required'),
+      body('device.model').trim().notEmpty().withMessage('Device model is required'),
+      body('reportedProblem').trim().notEmpty().withMessage('Reported problem description is required'),
       validate,
     ],
     createRepair
