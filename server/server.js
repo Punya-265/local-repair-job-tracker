@@ -24,9 +24,30 @@ const allowedOrigins = (process.env.CLIENT_URL || 'http://localhost:5173')
   .map((origin) => origin.trim())
   .filter(Boolean);
 
+const isAllowedOrigin = (origin) => {
+  if (!origin) return true;
+  if (allowedOrigins.includes(origin)) return true;
+
+  // Allow local Vite/React development servers on localhost or 127.0.0.1.
+  // This prevents CORS failures when Vite switches ports (for example 5173 -> 5174).
+  if (process.env.NODE_ENV !== 'production') {
+    try {
+      const url = new URL(origin);
+      return (
+        (url.hostname === 'localhost' || url.hostname === '127.0.0.1') &&
+        (url.protocol === 'http:' || url.protocol === 'https:')
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  return false;
+};
+
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+    if (isAllowedOrigin(origin)) return callback(null, true);
     return callback(new Error('CORS origin is not allowed'));
   },
   credentials: true,
