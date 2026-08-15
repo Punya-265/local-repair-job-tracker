@@ -8,6 +8,7 @@ import Login from './pages/Login';
 import Signup from './pages/Signup';
 import CustomerDashboard from './pages/CustomerDashboard';
 import CustomerRepairDetails from './pages/CustomerRepairDetails';
+import CustomerInvoice from './pages/CustomerInvoice';
 import Dashboard from './pages/Dashboard';
 import RepairsList from './pages/RepairsList';
 import CreateRepair from './pages/CreateRepair';
@@ -39,6 +40,7 @@ const AppRoutes = () => {
     <Route path="/signup" element={user ? <Navigate to={home} replace /> : <Signup />} />
     <Route path="/customer-dashboard" element={<ProtectedLayout allowedRoles={['customer']}><CustomerDashboard /></ProtectedLayout>} />
     <Route path="/customer-repairs/:repairId" element={<ProtectedLayout allowedRoles={['customer']}><CustomerRepairDetails /></ProtectedLayout>} />
+    <Route path="/customer-repairs/:repairId/invoice" element={<ProtectedLayout allowedRoles={['customer']}><CustomerInvoice /></ProtectedLayout>} />
     <Route path="/" element={<ProtectedLayout allowedRoles={['admin']}><Dashboard /></ProtectedLayout>} />
     <Route path="/repairs" element={<ProtectedLayout allowedRoles={['admin', 'technician']}><RepairsList /></ProtectedLayout>} />
     <Route path="/repairs/new" element={<ProtectedLayout allowedRoles={['admin', 'technician']}><CreateRepair /></ProtectedLayout>} />
