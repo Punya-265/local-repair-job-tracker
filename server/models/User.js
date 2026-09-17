@@ -27,12 +27,22 @@ userSchema.methods.matchPassword = async function (enteredPassword) {
 };
 
 userSchema.methods.getSignedJwtToken = function () {
-  if (!process.env.JWT_SECRET) {
+  // For local development, allow the project to run without requiring the
+  // student to configure a secret before testing the application. Production
+  // still requires an explicit JWT_SECRET.
+  const secret = process.env.JWT_SECRET || (
+    process.env.NODE_ENV !== 'production'
+      ? 'local-development-jwt-secret-change-for-production'
+      : null
+  );
+
+  if (!secret) {
     throw new Error('JWT_SECRET is not configured. Add JWT_SECRET to server/.env.');
   }
+
   return jwt.sign(
     { id: this._id, role: this.role, email: this.email, name: this.name },
-    process.env.JWT_SECRET,
+    secret,
     { expiresIn: process.env.JWT_EXPIRE || '30d' }
   );
 };
