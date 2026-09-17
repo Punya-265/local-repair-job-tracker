@@ -5,6 +5,7 @@ const path = require('path');
 const dotenv = require('dotenv');
 
 dotenv.config();
+const mongoose = require('mongoose');
 const connectDB = require('./config/db');
 const errorHandler = require('./middleware/errorHandler');
 const authRoutes = require('./routes/authRoutes');
@@ -52,19 +53,51 @@ app.use(cors({
 if (process.env.NODE_ENV === 'development') app.use(morgan('dev'));
 app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
 
+// The server starts listening immediately. Database initialization can take
+// time (especially when the development in-memory MongoDB binary is starting),
+// so API requests wait for the database instead of failing with ECONNREFUSED.
+let databaseReady = false;
+let databaseError = null;
+const databaseReadyPromise = connectDB()
+  .then(() => {
+    databaseReady = true;
+    console.log('[Database Ready]: API requests can now use the database.');
+  })
+  .catch((error) => {
+    databaseError = error;
+    console.error(`[Database Startup Error]: ${error.message}`);
+  });
+
 app.get('/api/health', (req, res) => {
-  let database = 'disconnected';
-  try {
-    const mongoose = require('mongoose');
-    database = mongoose.connection.readyState === 1 ? 'connected' : 'disconnected';
-  } catch (_) {}
+  let database = 'starting';
+  if (mongoose.connection.readyState === 1) database = 'connected';
+  else if (databaseError) database = 'error';
 
   res.status(200).json({
     status: 'online',
     database,
-    message: 'Local Repair Job Tracker API Service Running',
+    message: databaseError
+      ? `Database unavailable: ${databaseError.message}`
+      : database === 'starting'
+        ? 'API is online; database is still starting.'
+        : 'Local Repair Job Tracker API Service Running',
     timestamp: new Date(),
   });
+});
+
+// Hold database-dependent API requests until MongoDB is ready. This makes
+// startup reliable even if the in-memory development database takes time to boot.
+app.use('/api', async (req, res, next) => {
+  try {
+    await databaseReadyPromise;
+    if (databaseReady) return next();
+    return res.status(503).json({
+      success: false,
+      message: databaseError?.message || 'Database is still starting. Please try again shortly.',
+    });
+  } catch (error) {
+    return next(error);
+  }
 });
 
 app.use('/api/auth', authRoutes);
@@ -78,19 +111,14 @@ app.use(errorHandler);
 
 const PORT = process.env.PORT || 5000;
 
-const startServer = async () => {
-  try {
-    await connectDB();
-    app.listen(PORT, () => {
-      console.log('=======================================================');
-      console.log(`[Repair Tracker Server running in ${process.env.NODE_ENV || 'development'} mode]`);
-      console.log(`[Listening on Port]: http://localhost:${PORT}`);
-      console.log('=======================================================');
-    });
-  } catch (error) {
-    console.error(`[Server Startup Error]: ${error.message}`);
-    process.exit(1);
-  }
+const startServer = () => {
+  app.listen(PORT, () => {
+    console.log('=======================================================');
+    console.log(`[Repair Tracker Server running in ${process.env.NODE_ENV || 'development'} mode]`);
+    console.log(`[Listening on Port]: http://localhost:${PORT}`);
+    console.log('[Database Status]: Starting in the background...');
+    console.log('=======================================================');
+  });
 };
 
 process.on('unhandledRejection', (err) => {
