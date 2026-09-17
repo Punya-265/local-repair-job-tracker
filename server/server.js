@@ -19,7 +19,7 @@ app.disable('x-powered-by');
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-const allowedOrigins = (process.env.CLIENT_URL || 'http://localhost:5173')
+const allowedOrigins = (process.env.CLIENT_URL || 'http://localhost:3000')
   .split(',')
   .map((origin) => origin.trim())
   .filter(Boolean);
@@ -27,9 +27,6 @@ const allowedOrigins = (process.env.CLIENT_URL || 'http://localhost:5173')
 const isAllowedOrigin = (origin) => {
   if (!origin) return true;
   if (allowedOrigins.includes(origin)) return true;
-
-  // Allow local Vite/React development servers on localhost or 127.0.0.1.
-  // This prevents CORS failures when Vite switches ports (for example 5173 -> 5174).
   if (process.env.NODE_ENV !== 'production') {
     try {
       const url = new URL(origin);
@@ -41,7 +38,6 @@ const isAllowedOrigin = (origin) => {
       return false;
     }
   }
-
   return false;
 };
 
@@ -56,12 +52,20 @@ app.use(cors({
 if (process.env.NODE_ENV === 'development') app.use(morgan('dev'));
 app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
 
-app.get('/api/health', (req, res) => res.status(200).json({
-  status: 'online',
-  database: 'connected',
-  message: 'Local Repair Job Tracker API Service Running',
-  timestamp: new Date(),
-}));
+app.get('/api/health', (req, res) => {
+  let database = 'disconnected';
+  try {
+    const mongoose = require('mongoose');
+    database = mongoose.connection.readyState === 1 ? 'connected' : 'disconnected';
+  } catch (_) {}
+
+  res.status(200).json({
+    status: 'online',
+    database,
+    message: 'Local Repair Job Tracker API Service Running',
+    timestamp: new Date(),
+  });
+});
 
 app.use('/api/auth', authRoutes);
 app.use('/api/repairs', repairRoutes);
@@ -73,20 +77,26 @@ app.use((req, res) => res.status(404).json({ success: false, message: `API Route
 app.use(errorHandler);
 
 const PORT = process.env.PORT || 5000;
+
 const startServer = async () => {
-  await connectDB();
-  app.listen(PORT, () => {
-    console.log('=======================================================');
-    console.log(`[Repair Tracker Server running in ${process.env.NODE_ENV || 'development'} mode]`);
-    console.log(`[Listening on Port]: http://localhost:${PORT}`);
-    console.log('=======================================================');
-  });
+  try {
+    await connectDB();
+    app.listen(PORT, () => {
+      console.log('=======================================================');
+      console.log(`[Repair Tracker Server running in ${process.env.NODE_ENV || 'development'} mode]`);
+      console.log(`[Listening on Port]: http://localhost:${PORT}`);
+      console.log('=======================================================');
+    });
+  } catch (error) {
+    console.error(`[Server Startup Error]: ${error.message}`);
+    process.exit(1);
+  }
 };
 
-startServer().catch((error) => {
-  console.error(`[Server Startup Error]: ${error.message}`);
-  process.exit(1);
+process.on('unhandledRejection', (err) => {
+  console.error(`[Unhandled Rejection]: ${err.message}`);
 });
 
-process.on('unhandledRejection', (err) => console.error(`[Unhandled Rejection]: ${err.message}`));
+startServer();
+
 module.exports = app;
