@@ -29,7 +29,6 @@ const demoUsers = [
 
 const createDemoUsers = async () => {
   const User = require('../models/User');
-
   for (const userData of demoUsers) {
     const existingUser = await User.findOne({ email: userData.email });
     if (!existingUser) {
@@ -42,19 +41,38 @@ const createDemoUsers = async () => {
 const connectDB = async () => {
   const mongoUri = process.env.MONGODB_URI;
 
-  if (!mongoUri) {
-    throw new Error(
-      'MONGODB_URI is not configured. Add your MongoDB Atlas connection string to server/.env. Persistent storage is required.'
-    );
+  // Try the configured MongoDB first. This is the normal/persistent mode.
+  if (mongoUri) {
+    try {
+      const conn = await mongoose.connect(mongoUri, {
+        serverSelectionTimeoutMS: 8000,
+      });
+      console.log(`[MongoDB Connected]: ${conn.connection.host}`);
+      await createDemoUsers();
+      return;
+    } catch (error) {
+      console.warn(`[MongoDB Atlas unavailable]: ${error.message}`);
+      console.warn('[Database Fallback]: Starting an in-memory MongoDB for local development...');
+    }
+  } else {
+    console.warn('[MONGODB_URI missing]: Starting an in-memory MongoDB for local development...');
+  }
+
+  // Development fallback: lets the application run even when Atlas/IP access
+  // is not configured. Data is temporary and is lost when the server stops.
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('MongoDB connection failed in production. Check MONGODB_URI and Atlas network access.');
   }
 
   try {
-    const conn = await mongoose.connect(mongoUri);
-    console.log(`[MongoDB Connected]: ${conn.connection.host}`);
+    const { MongoMemoryServer } = require('mongodb-memory-server');
+    const memoryServer = await MongoMemoryServer.create();
+    const conn = await mongoose.connect(memoryServer.getUri('repair_tracker'));
+    console.log(`[MongoDB Memory Connected]: ${conn.connection.host}`);
+    console.log('[WARNING]: Using temporary in-memory database. Data will be lost when the server stops.');
     await createDemoUsers();
-  } catch (error) {
-    console.error(`[MongoDB Error]: ${error.message}`);
-    process.exit(1);
+  } catch (fallbackError) {
+    throw new Error(`MongoDB connection failed and local fallback could not start: ${fallbackError.message}`);
   }
 };
 
